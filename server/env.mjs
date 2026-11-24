@@ -24,11 +24,11 @@ function parseEnvFile(file) {
 
 export function loadConfig() {
   const local = parseEnvFile(path.join(APP_DIR, '.env'))
-  const keyFiles = (process.env.COVERME_KEYS_FILE ?? local.COVERME_KEYS_FILE ?? '')
+  const keyFiles = (process.env.COVERME_KEYS_FILE || local.COVERME_KEYS_FILE || '')
     .split(',').map(s => s.trim()).filter(Boolean)
   let fromFiles = {}
   for (const f of keyFiles) fromFiles = { ...fromFiles, ...parseEnvFile(f) }
-  const get = k => process.env[k] ?? local[k] ?? fromFiles[k] ?? ''
+  const get = k => process.env[k] || local[k] || fromFiles[k] || '' // an empty line in .env does not hide a value from a keys file
   const num = (k, d) => { const n = Number(get(k)); return get(k) !== '' && Number.isFinite(n) ? n : d }
   return {
     apiKey: get('BINANCE_TESTNET_API_KEY'),

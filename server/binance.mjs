@@ -15,6 +15,7 @@ export class BinanceError extends Error {
 // Turns a failure into one plain sentence a person can act on.
 export function explain(err) {
   if (err instanceof BinanceError) {
+    if (err.msg === 'API key or secret is missing') return 'key: BINANCE_TESTNET_API_KEY / BINANCE_TESTNET_SECRET_KEY not found. Copy .env.example to .env and fill it in.'
     if (err.status === 451) return 'restricted location: Binance testnet refuses this IP (HTTP 451). Run the backend from a non-US network.'
     if (err.status === 401 || err.code === -2014 || err.code === -2015 || err.code === -2008)
       return 'regenerate key: the testnet rejected this API key (testnet resets wipe keys about monthly). Create a new HMAC key at https://testnet.binance.vision and update your env file.'
