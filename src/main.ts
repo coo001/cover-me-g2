@@ -94,7 +94,7 @@ function view(): string {
     return lines([
       'COVER ME   TESTNET',
       m ? `NEXT ${when(m.start - skew)}  ${m.title} (${Math.round((m.end - m.start) / 60000)} min)`
-        : t.calendar?.configured && !t.calendar.ok ? 'Calendar unreachable.' : 'No meeting found.',
+        : !t.calendar?.configured ? 'No calendar set.' : !t.calendar.ok ? 'Calendar unreachable.' : 'No meeting found.',
       `Holding ${btc(guard)} BTC  @ ${money(price)}`,
       `Line  ${money(price * (1 - t.linePct / 100))}  (-${t.linePct}%)`,
       '',
