@@ -9,7 +9,7 @@ import { fetchEvents, occurrences } from './calendar.mjs'
 
 const cfg = loadConfig()
 const STALE_ORDER_MS = 5000 // never send an order on a price older than this
-const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a)
+const log = (...a) => console.log(new Date().toTimeString().slice(0, 8), ...a) // local time, same clock as the glasses
 
 const state = {
   price: null,      // best bid as Binance sent it (string): the price a sell would hit
