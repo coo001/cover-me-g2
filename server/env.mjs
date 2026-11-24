@@ -42,5 +42,7 @@ export function loadConfig() {
     coverMin: num('COVERME_COVER_MIN', 30),
     allowOrigin: get('COVERME_ALLOW_ORIGIN') || 'http://localhost:5173',
     testHooks: get('COVERME_TEST_HOOKS') === '1',
+    icalUrl: get('COVERME_ICAL_URL') || get('DEMO_ICAL_URL'), // secret: never printed
+    dataDir: get('COVERME_DATA_DIR') || path.join(APP_DIR, 'data'),
   }
 }

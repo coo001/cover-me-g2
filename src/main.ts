@@ -14,14 +14,18 @@ const OFFLINE_MS = 10_000 // no word from the backend for this long = OFFLINE
 const STALE_MS = 15_000   // price older than this = STALE
 const ORDER_STALE_MS = 5_000
 
-type Cover = { since: number; till: number; basePrice: number; line: number; guardQty: string }
+type Meeting = { title: string; start: number; end: number }
+type Cover = { since: number; till: number; basePrice: number; line: number; guardQty: string; event: Meeting | null }
 type Tick = {
   now: number; net: string; price: string | null; priceTs: number; holding: string | null
   guardBtc: number; linePct: number; coverMin: number; cover: Cover | null
   call: { id: number; ts: number; price: string; nextLine: number } | null
+  missed: { ts: number; line?: number } | null
+  recap: { title: string; start: number; end: number; lines: string[] } | null
+  calendar: { configured: boolean; ok: boolean; next: Meeting | null }
 }
 type Order = { orderId: number; executedQty: string; cummulativeQuoteQty: string; status: string }
-type Screen = 'ready' | 'covering' | 'peek' | 'call' | 'confirm' | 'sending' | 'filled' | 'message'
+type Screen = 'ready' | 'covering' | 'peek' | 'call' | 'confirm' | 'sending' | 'filled' | 'message' | 'missed'
 
 let tick: Tick | null = null
 let lastHeard = 0        // local time of the last backend message
@@ -36,6 +40,8 @@ let peekTimer: number | undefined
 
 // ---------- formatting ----------
 const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
+const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString()
+const when = (ms: number) => (sameDay(ms, Date.now()) ? '' : `${new Date(ms).toDateString().slice(0, 3)} `) + hhmm(ms)
 const money = (n: number) => Math.round(n).toLocaleString('en-US')
 const btc = (n: number) => n.toFixed(3)
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
@@ -75,31 +81,51 @@ function view(): string {
     return lines(['COVER ME   TESTNET', '', 'OFFLINE - not covering', 'No orders can be sent.', '', 'Start the backend: npm run server', '', '', 'double tap = exit'])
   }
   const price = Number(t.price)
-  if (screen === 'ready') {
+  if (t.recap && !t.cover) {
+    // Shown when the meeting (or the manual cover) ends. Template sentences from the backend.
+    const r = t.recap
+    return lines([`${r.title.toUpperCase()}  ${hhmm(r.start - skew)}-${hhmm(r.end - skew)}`, ...r.lines, '', '', '', '', statusLine(), 'tap = done'])
+  }
+  const c = t.cover
+  if (!c) {
     const guard = Math.min(Number(t.holding ?? 0), t.guardBtc)
+    const m = t.calendar?.next
+    const soon = !!m && m.start - t.now <= t.coverMin * 60000
     return lines([
       'COVER ME   TESTNET',
+      m ? `NEXT ${when(m.start - skew)}  ${m.title} (${Math.round((m.end - m.start) / 60000)} min)`
+        : t.calendar?.configured && !t.calendar.ok ? 'Calendar unreachable.' : 'No meeting found.',
       `Holding ${btc(guard)} BTC  @ ${money(price)}`,
       `Line  ${money(price * (1 - t.linePct / 100))}  (-${t.linePct}%)`,
       '',
+      m ? `Starts by itself at ${when(m.start - skew)}.` : '',
       'Covers only while this app is open.',
-      '', '',
       statusLine(),
-      `tap = cover for ${t.coverMin} min`,
+      soon ? 'tap = start now' : `tap = cover for ${t.coverMin} min`,
     ])
   }
-  const c = t.cover
-  if (!c) return lines(['COVER ME   TESTNET', '', 'Cover ended.', '', '', '', '', statusLine(), 'tap = ok'])
   const since = pct((price / c.basePrice - 1) * 100)
   if (screen === 'peek') {
     return lines([`BTC ${money(price)}   ${since} since ${hhmm(c.since - skew)}`, `Line ${money(c.line)}`, `Watching ${c.guardQty} BTC`, '', '', '', '', '', `covering till ${hhmm(c.till - skew)}    ${statusLine()}`])
+  }
+  if (screen === 'missed' && t.missed) {
+    // The line was crossed while nobody could be asked, and the price has come back. Say it before anything else.
+    return lines([
+      `MISSED ${hhmm(t.missed.ts - skew)} while offline`,
+      `Your line ${money(t.missed.line ?? c.line)} was crossed.`,
+      'No order was sent.',
+      `BTC ${money(price)} now, back above the line.`,
+      '', '', '',
+      `covering till ${hhmm(c.till - skew)}    ${statusLine()}`,
+      'tap = ok',
+    ])
   }
   if (screen === 'call' && t.call) {
     const g = Number(c.guardQty)
     const rows = [`Sell half   ${btc(g / 2)} BTC`, `Sell all    ${btc(g)} BTC`, `Hold, ask again at ${money(t.call.nextLine)}`]
     return lines([
-      `BTC ${money(price)}   ${since} since ${hhmm(c.since - skew)}`,
-      `Below your line ${money(c.line)}`,
+      t.missed ? `MISSED ${hhmm(t.missed.ts - skew)} while offline` : `BTC ${money(price)}   ${since} since ${hhmm(c.since - skew)}`,
+      t.missed ? `BTC ${money(price)}  still below line ${money(c.line)}` : `Below your line ${money(c.line)}`,
       '',
       ...rows.map((r, i) => `${i === cursor ? '>' : '  '} ${r}`),
       '', '',
@@ -119,7 +145,8 @@ function view(): string {
     ])
   }
   // covering: one quiet line at the bottom
-  return lines(['', '', '', '', '', '', '', '', `covering till ${hhmm(c.till - skew)}    ${statusLine()}`])
+  const left = Number(c.guardQty) > 0 ? 'covering till' : 'all sold, recap at'
+  return lines(['', '', '', '', '', '', '', '', `${left} ${hhmm(c.till - skew)}    ${statusLine()}`])
 }
 
 // ---------- display ----------
@@ -138,11 +165,14 @@ function render() {
   // Follow the backend: a call takes the screen, the end of a cover gives it back.
   if (tick) {
     const calling = !!tick.cover && !!tick.call && link() !== 'offline'
-    if (calling && (screen === 'covering' || screen === 'peek' || screen === 'ready')) {
+    if (calling && (screen === 'covering' || screen === 'peek' || screen === 'ready' || screen === 'missed')) {
       screen = 'call'; cursor = 0; orderId = `cm-${tick.call!.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     }
     if (!calling && (screen === 'call' || screen === 'confirm')) screen = tick.cover ? 'covering' : 'ready'
     if (tick.cover && screen === 'ready') screen = 'covering'
+    if (!tick.cover && (screen === 'covering' || screen === 'peek' || screen === 'missed')) screen = 'ready' // ended: Recap or Ready
+    if (tick.cover && tick.missed && !tick.call && screen === 'covering' && link() === 'live') screen = 'missed'
+    if (screen === 'missed' && !tick.missed) screen = tick.cover ? 'covering' : 'ready'
   }
   const next = view()
   if (next === shown) return
@@ -181,6 +211,8 @@ async function onTap() {
   const l = link()
   if (screen === 'message' || screen === 'filled') { screen = tick?.cover ? 'covering' : 'ready'; filled = null; return render() }
   if (l === 'offline') return
+  if (screen === 'missed') { await post('/api/ack', { what: 'missed' }); screen = 'covering'; return render() }
+  if (screen === 'ready' && tick?.recap && !tick.cover) { await post('/api/ack', { what: 'recap' }); return render() }
   if (screen === 'ready') {
     const r = await post('/api/start', {})
     if (!r.ok) return say(reason[r.error] ?? 'Could not start.')
@@ -210,6 +242,7 @@ async function onTap() {
 function onBack() {
   if (screen === 'confirm') { screen = 'call'; return render() }
   if (screen === 'peek' || screen === 'message') { screen = tick?.cover ? 'covering' : 'ready'; return render() }
+  if (screen === 'missed') return void onTap()
   if (screen === 'sending') return
   bridge.shutDownPageContainer(1) // root: system exit dialog
 }
