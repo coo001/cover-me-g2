@@ -7,7 +7,8 @@ the glasses then show Binance's own order number, quantity and status.
 Give it a private iCal address and your meetings switch the watch on and off: it starts by itself
 at the meeting's start time and shows a short recap at the end.
 
-Track: 03 Exchanges & Stocks. **Testnet only.** Status: work in progress (day 2 of the hackathon).
+Tracks: 03 Exchanges & Stocks (main) + 04 AI Assistants & Work (Google Calendar, read through a private iCal address).
+**Testnet only.** Status: work in progress.
 
 ## What this app does not do
 
@@ -45,6 +46,8 @@ npm run simulate            # 3. Even Hub simulator, opens the app
 
 Keep the simulator window visible. While another window covers it completely, macOS pauses the
 simulator's web view and the glasses display stops updating until the next input.
+Our 45-minute test (one calendar meeting, 15:00-15:45, a screenshot every minute, recap `Covered 45 of 45 min.`)
+ran with the window covered and a test script sending an input the app ignores every 2 s to keep it awake.
 
 On the glasses: tap = start a 30 minute cover. When the best bid falls to your line a card appears:
 up/down = move, tap = choose, tap again = send, double tap = back. `Hold` takes one tap.
