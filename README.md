@@ -1,13 +1,16 @@
 # Cover Me (G2)
 
 Open Cover Me before you walk into a meeting. It stays on one quiet line and asks you once,
-only if your Binance **Spot Testnet** holding falls to your line. Two taps sell on the testnet;
+only if your Binance **Spot Testnet** holding falls to your line. It works only while the app stays open
+on the glasses, only on the testnet, and has been run only in the simulator, not on real G2. Two taps sell on the testnet;
 the glasses then show Binance's own order number, quantity and status.
 
 Give it a private iCal address and your meetings switch the watch on and off: it starts by itself
 at the meeting's start time and shows a short recap at the end.
 
-Tracks: 03 Exchanges & Stocks (main) + 04 AI Assistants & Work (Google Calendar, read through a private iCal address).
+Track: 03 Exchanges & Stocks. Supporting feature for track 04 (AI Assistants & Work): Google Calendar, read-only
+through a private iCal address, starts and ends the watch at a meeting's times. Nothing else from that track:
+no AI, no mail, no writing to the calendar.
 **Testnet only.** Status: work in progress.
 
 ## What this app does not do
@@ -92,6 +95,24 @@ happened at or below your line, the glasses show `MISSED HH:MM while offline` fi
 if the price is still below the line. The same happens when the line is crossed while the app is closed.
 
 `npm run drain` is a test helper: it sells all free testnet BTC so you can try `doctor` and `seed` from zero.
+
+## Measured
+
+| What | Value | How it was measured |
+|---|---|---|
+| Orders checked against Binance's raw reply | 4 of 4 identical (order id, executed quantity, status, quote amount): 16998212, 16998712, 16999489, 17553144 | `npm run verify -- <orderId>` next to the glasses screen |
+| Order in the video | 17553144, SELL 0.01 BTC, 594.0049 USDT, FILLED, 25 Nov 10:39:15 KST | glasses screen, backend log, `verify` |
+| Line in the video take | 0.005% under the start price (59,441.63 -> 59,438.66 USDT) | `COVERME_LINE_PCT=0.005`; the default is 2% |
+| Wait for the price in the video take | 160 s, from cover start 10:36:29 to line reached 10:39:09 | backend log; 147 s of it is cut from the video and marked as a time jump |
+| Card shown -> order filled | 6 s (10:39:09 -> 10:39:15), two taps | taps sent by the capture script through the simulator's automation API |
+| Calendar start and end | event 15:00-15:45; cover started 15:00:00 with no tap, recap 15:45:00, `Covered 45 of 45 min.` | backend log, one screenshot a minute. "Covered" counts minutes with a fresh price and the app open |
+| Condition of that 45 minute run | simulator window covered by other windows; a script sent an input the app ignores every 2 s to keep the web view awake | see "Run it" |
+| Calendar edit reaches the app | 35 s and 40 s (2 edits) | the feed is read once a minute |
+| Backend killed -> `OFFLINE - not covering` | 11 s (rule: backend silent for 10 s) | simulator screenshots |
+| Backend restarted -> reconnected | 2 to 4 s, no input | simulator screenshots |
+| Price age limits | `STALE` after 15 s without a price; an order is refused when the price is older than 5 s | code constants, shown on the glasses |
+
+All of this is on Binance Spot **Testnet** and in the Even Hub simulator 0.9.5. Nothing was measured on real G2 hardware or with real users.
 
 ## What existed before Nov 23
 
